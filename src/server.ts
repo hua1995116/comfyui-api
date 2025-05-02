@@ -495,7 +495,7 @@ server.after(() => {
               );
             }
           });
-        return reply.code(202).send({ status: "ok", id, webhook, prompt });
+        return reply.code(202).send({ status: "ok", id, webhook });
       } else {
         /**
          * If the user has not provided a webhook, we wait for the images to be generated
@@ -634,7 +634,6 @@ server.after(() => {
             }
 
             body.input = input;
-            body.prompt = prompt;
             // 确保传递 URLs 字段
             if (body.urls) {
               body.urls = body.urls;

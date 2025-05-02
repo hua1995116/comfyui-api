@@ -132,7 +132,7 @@ export type PromptRequest = z.infer<typeof PromptRequestSchema>;
 
 export const PromptResponseSchema = z.object({
   id: z.string(),
-  prompt: z.record(ComfyNodeSchema),
+  prompt: z.record(ComfyNodeSchema).optional(),
   images: z.array(z.string()).optional(),
   filenames: z.array(z.string()).optional(),
   urls: z.array(z.string()).optional(),
@@ -185,7 +185,7 @@ export type WorkflowRequest = z.infer<typeof WorkflowRequestSchema>;
 export const WorkflowResponseSchema = z.object({
   id: z.string(),
   input: z.record(z.any()),
-  // prompt: z.record(ComfyNodeSchema), // 需要去除
+  prompt: z.record(ComfyNodeSchema).optional(),
   images: z.array(z.string()).optional(),
   filenames: z.array(z.string()).optional(),
   urls: z.array(z.string()).optional(),
