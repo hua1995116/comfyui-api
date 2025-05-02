@@ -210,7 +210,7 @@ server.after(() => {
       let hasOutputNode = false;
       const loadImageNodes = new Set<string>(["LoadImage"]);
       const loadDirectoryOfImagesNodes = new Set<string>(["VHS_LoadImages"]);
-      const outputNodes = ["SaveImage", "Upload_R2", "Upload_B2", "Upload_Cos", "Upload_Qiniu", "Upload_Aliyun"];
+      const outputNodes = ["SaveImage", "Upload_R2", "Upload_B2", "Upload_Cos", "Upload_Qiniu", "Upload_Aliyun", "Upload_AWS"];
 
       for (const nodeId in prompt) {
         const node = prompt[nodeId];
