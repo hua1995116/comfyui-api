@@ -65,8 +65,7 @@ export async function waitForComfyUIToStart(
   }
 
   throw new Error(
-    `Comfy UI did not start after ${
-      (config.startupCheckInterval / 1000) * config.startupCheckMaxTries
+    `Comfy UI did not start after ${(config.startupCheckInterval / 1000) * config.startupCheckMaxTries
     } seconds`
   );
 }
@@ -127,34 +126,79 @@ export async function getPromptOutputs(
   if (status.completed) {
     for (const nodeId in outputs) {
       const node = outputs[nodeId];
+
+      // 处理 filePath 格式的输出 (直接在节点上)
+      if (node.filePath && Array.isArray(node.filePath)) {
+        for (let i = 0; i < node.filePath.length; i++) {
+          const fileUrl = node.filePath[i];
+          log.info(`Direct upload successful: ${fileUrl}`);
+          const infoBuffer = Buffer.from(JSON.stringify({
+            type: 'upload',
+            url: fileUrl
+          }));
+          allOutputs[`upload_url_${nodeId}_${i}.json`] = infoBuffer;
+        }
+        continue;
+      }
+
       for (const outputType in node) {
-        for (let outputFile of node[outputType]) {
-          const filename = outputFile.filename;
-          if (!filename) {
-            /**
-             * Some nodes have fields in the outputs that are not actual files.
-             * For example, the SaveAnimatedWebP node has a field called "animated"
-             * that only container boolean values mapping to the files present in
-             * .images. We can safely ignore these.
-             */
-            continue;
+        // 处理 filePath 数组输出 (在 outputType 内)
+        if (outputType === 'filePath' && Array.isArray(node[outputType])) {
+          for (let i = 0; i < node[outputType].length; i++) {
+            const fileUrl = node[outputType][i];
+            log.info(`Upload successful: ${fileUrl}`);
+            const infoBuffer = Buffer.from(JSON.stringify({
+              type: 'upload',
+              url: fileUrl
+            }));
+            allOutputs[`upload_url_${nodeId}_${i}.json`] = infoBuffer;
           }
-          const filepath = path.join(config.outputDir, filename);
-          fileLoadPromises.push(
-            fsPromises
-              .readFile(filepath)
-              .then((data) => {
-                allOutputs[filename] = data;
-              })
-              .catch((e: any) => {
-                /**
-                 * The most likely reason for this is a node that has an optonal
-                 * output. If the node doesn't produce that output, the file won't
-                 * exist.
-                 */
-                log.warn(`Failed to read file ${filepath}: ${e.message}`);
-              })
-          );
+          continue;
+        }
+
+        // 处理标准输出格式
+        if (Array.isArray(node[outputType])) {
+          for (let outputFile of node[outputType]) {
+            // 检查是否为字符串（而非对象）
+            if (typeof outputFile === 'string') {
+              // 处理字符串格式的输出
+              log.info(`String output detected: ${outputFile}`);
+              continue;
+            }
+
+            // 跳过临时文件
+            if (outputFile.type === "temp") {
+              log.debug(`Skipping temporary file: ${outputFile.filename}`);
+              continue;
+            }
+
+            const filename = outputFile.filename;
+            if (!filename) {
+              /**
+               * Some nodes have fields in the outputs that are not actual files.
+               * For example, the SaveAnimatedWebP node has a field called "animated"
+               * that only container boolean values mapping to the files present in
+               * .images. We can safely ignore these.
+               */
+              continue;
+            }
+            const filepath = path.join(config.outputDir, filename);
+            fileLoadPromises.push(
+              fsPromises
+                .readFile(filepath)
+                .then((data) => {
+                  allOutputs[filename] = data;
+                })
+                .catch((e: any) => {
+                  /**
+                   * The most likely reason for this is a node that has an optonal
+                   * output. If the node doesn't produce that output, the file won't
+                   * exist.
+                   */
+                  log.warn(`Failed to read file ${filepath}: ${e.message}`);
+                })
+            );
+          }
         }
       }
     }
@@ -232,8 +276,7 @@ class HistoryEndpointPoller {
   async poll(): Promise<Record<string, Buffer> | null> {
     while (this.currentTries < this.getMaxTries() || this.maxTries === 0) {
       this.log.debug(
-        `Polling history endpoint for prompt ${this.promptId}, try ${
-          this.currentTries
+        `Polling history endpoint for prompt ${this.promptId}, try ${this.currentTries
         } of ${this.getMaxTries()}`
       );
       const outputs = await getPromptOutputs(this.promptId, this.log);
@@ -242,8 +285,7 @@ class HistoryEndpointPoller {
       }
       this.currentTries++;
       this.log.debug(
-        `Polling history endpoint for prompt ${
-          this.promptId
+        `Polling history endpoint for prompt ${this.promptId
         }, sleep for ${this.getInterval()}ms`
       );
       await new Promise<void>((resolve) => {

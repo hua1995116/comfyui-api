@@ -207,29 +207,21 @@ server.after(() => {
        * Here we go through all the nodes in the prompt to validate it,
        * and also to do some pre-processing.
        */
-      let hasSaveImage = false;
+      let hasOutputNode = false;
       const loadImageNodes = new Set<string>(["LoadImage"]);
       const loadDirectoryOfImagesNodes = new Set<string>(["VHS_LoadImages"]);
+      const outputNodes = ["SaveImage", "Upload_R2", "Upload_B2", "Upload_Cos", "Upload_Qiniu", "Upload_Aliyun"];
+
       for (const nodeId in prompt) {
         const node = prompt[nodeId];
-        if (
-          node.inputs.filename_prefix &&
-          typeof node.inputs.filename_prefix === "string"
-        ) {
-          /**
-           * If the node is for saving files, we want to set the filename_prefix
-           * to the id of the prompt. This ensures no collisions between prompts
-           * from different users.
-           */
-          node.inputs.filename_prefix = id;
-          if (
-            typeof node.inputs.save_output !== "undefined" &&
-            !node.inputs.save_output
-          ) {
-            continue;
-          }
-          hasSaveImage = true;
-        } else if (
+        // 检查是否 含有 output 节点
+        const is_output_node = outputNodes.some(item => node.class_type.includes(item));
+
+        if (is_output_node) {
+          hasOutputNode = true;
+        }
+        // 处理 LoadImage 节点
+        else if (
           loadImageNodes.has(node.class_type) &&
           typeof node.inputs.image === "string"
         ) {
@@ -285,10 +277,10 @@ server.after(() => {
       /**
        * If the prompt has no outputs, there's no point in running it.
        */
-      if (!hasSaveImage) {
+      if (!hasOutputNode) {
         return reply.code(400).send({
           error:
-            'Prompt must contain a node with a "filename_prefix" input, such as "SaveImage"',
+            'Prompt must contain an output node, such as "SaveImage" or "Upload"',
           location: "prompt",
         });
       }
@@ -368,10 +360,12 @@ server.after(() => {
                     }
                   });
 
-                // Remove the file after sending
-                fsPromises.unlink(
-                  path.join(config.outputDir, originalFilename)
-                );
+                // 如果是普通文件，处理完后删除
+                if (!originalFilename.startsWith('upload_url_') &&
+                  !originalFilename.includes('temp')) {
+                  // Remove the file after reading
+                  fsPromises.unlink(path.join(config.outputDir, originalFilename));
+                }
               }
             }
           )
@@ -423,6 +417,7 @@ server.after(() => {
          */
         const images: string[] = [];
         const filenames: string[] = [];
+        const urls: string[] = [];
 
         /**
          * Send the prompt to ComfyUI, and wait for the images to be generated.
@@ -431,6 +426,20 @@ server.after(() => {
         for (const originalFilename in allOutputs) {
           let fileBuffer = allOutputs[originalFilename];
           let filename = originalFilename;
+
+          // 处理上传结果
+          if (originalFilename.startsWith('upload_url_')) {
+            try {
+              const uploadInfo = JSON.parse(fileBuffer.toString('utf-8'));
+              app.log.info(`Processing upload result: ${uploadInfo.url}`);
+
+              // 将 URL 添加到 urls 数组中
+              urls.push(uploadInfo.url);
+              continue;
+            } catch (e: any) {
+              app.log.warn(`Failed to parse upload info: ${e.message}`);
+            }
+          }
 
           if (convert_output) {
             try {
@@ -451,11 +460,15 @@ server.after(() => {
           images.push(base64File);
           filenames.push(filename);
 
-          // Remove the file after reading
-          fsPromises.unlink(path.join(config.outputDir, originalFilename));
+          // 如果是普通文件，处理完后删除
+          if (!originalFilename.startsWith('upload_url_') &&
+            !originalFilename.includes('temp')) {
+            // Remove the file after reading
+            fsPromises.unlink(path.join(config.outputDir, originalFilename));
+          }
         }
 
-        return reply.send({ id, prompt, images, filenames });
+        return reply.send({ id, prompt, images, filenames, urls });
       }
     }
   );
@@ -535,6 +548,10 @@ server.after(() => {
 
             body.input = input;
             body.prompt = prompt;
+            // 确保传递 URLs 字段
+            if (body.urls) {
+              body.urls = body.urls;
+            }
 
             return reply.code(resp.status).send(body);
           }

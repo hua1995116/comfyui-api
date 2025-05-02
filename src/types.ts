@@ -135,6 +135,7 @@ export const PromptResponseSchema = z.object({
   prompt: z.record(ComfyNodeSchema),
   images: z.array(z.string()).optional(),
   filenames: z.array(z.string()).optional(),
+  urls: z.array(z.string()).optional(),
   webhook: z.string().optional(),
   convert_output: OutputConversionOptionsSchema.optional(),
   status: z.enum(["ok"]).optional(),
@@ -187,6 +188,7 @@ export const WorkflowResponseSchema = z.object({
   prompt: z.record(ComfyNodeSchema),
   images: z.array(z.string()).optional(),
   filenames: z.array(z.string()).optional(),
+  urls: z.array(z.string()).optional(),
   webhook: z.string().optional(),
   convert_output: OutputConversionOptionsSchema.optional(),
   status: z.enum(["ok"]).optional(),
@@ -194,15 +196,15 @@ export const WorkflowResponseSchema = z.object({
 
 export interface ComfyWSMessage {
   type:
-    | "status"
-    | "progress"
-    | "executing"
-    | "execution_start"
-    | "execution_cached"
-    | "executed"
-    | "execution_success"
-    | "execution_interrupted"
-    | "execution_error";
+  | "status"
+  | "progress"
+  | "executing"
+  | "execution_start"
+  | "execution_cached"
+  | "executed"
+  | "execution_success"
+  | "execution_interrupted"
+  | "execution_error";
   data: any;
   sid: string | null;
 }
@@ -401,8 +403,12 @@ export type ComfyHistoryResponse = Record<
         string,
         {
           filename: string;
+          type?: string;
         }[]
-      >
+      > | {
+        filePath?: string[];
+        [key: string]: any;
+      }
     >;
     status: {
       status_str: string;
