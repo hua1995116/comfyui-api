@@ -40,45 +40,45 @@ import { z } from "zod";
 import { randomUUID } from "crypto";
 import { WebSocket } from "ws";
 import { fetch, Agent } from "undici";
+import fp from "fastify-plugin";
+
+// 为 Fastify 请求对象扩展类型
+declare module 'fastify' {
+  interface FastifyRequest {
+    apiKey: string;
+  }
+}
 
 const { apiVersion: version } = config;
 
-const server = Fastify({
-  bodyLimit: config.maxBodySize,
-  logger: { level: config.logLevel },
-  connectionTimeout: 0,
-  keepAliveTimeout: 0,
-  requestTimeout: 0,
-});
-server.setValidatorCompiler(validatorCompiler);
-server.setSerializerCompiler(serializerCompiler);
+// 创建一个 Fastify 插件来处理 API 密钥验证
+const apiKeyAuthPlugin = fp(async (server, options) => {
+  server.decorateRequest('apiKey', '');
 
-// 添加 API 密钥验证中间件
-server.addHook('preHandler', (request, reply, done) => {
-  const app = server.withTypeProvider<ZodTypeProvider>();
-  // 如果未启用 API 密钥验证，则跳过验证
-  if (!config.enableApiKeyAuth) {
-    return done();
-  }
+  server.addHook('onRequest', (request, reply, done) => {
+    if (!config.enableApiKeyAuth) {
+      return done();
+    }
 
-  const apiKey = request.headers['x-api-key'];
+    // 获取请求头中的 API 密钥
+    const apiKeyHeader = request.headers['x-api-key'];
 
-  // 健康检查端点不需要 API 密钥
-  if (request.url === '/health' || request.url === '/ready') {
-    return done();
-  }
+    // 跳过健康检查端点
+    if (request.url === '/health' || request.url === '/ready') {
+      return done();
+    }
 
-  // 验证 API 密钥
-  if (!apiKey || apiKey !== config.apiKey) {
-    app.log.error(`无效的 API 密钥: ${apiKey}`);
-    app.log.error(`配置中的值: ${config.apiKey}`);
-    return reply.code(401).send({
-      error: "无效的 API 密钥",
-      message: "请在请求头中提供有效的 X-API-Key"
-    });
-  }
+    if (!apiKeyHeader || apiKeyHeader !== config.apiKey) {
+      server.log.error(`无效的 API 密钥: ${apiKeyHeader}`);
+      return reply.code(401).send({
+        error: "无效的 API 密钥",
+        message: "请在请求头中提供有效的 X-API-Key"
+      });
+    }
 
-  done();
+    request.apiKey = apiKeyHeader;
+    done();
+  });
 });
 
 const modelSchema: any = {};
@@ -97,6 +97,19 @@ for (const modelType in config.models) {
 let warm = false;
 let wasEverWarm = false;
 let queueDepth = 0;
+
+const server = Fastify({
+  bodyLimit: config.maxBodySize,
+  logger: { level: config.logLevel },
+  connectionTimeout: 0,
+  keepAliveTimeout: 0,
+  requestTimeout: 0,
+});
+server.setValidatorCompiler(validatorCompiler);
+server.setSerializerCompiler(serializerCompiler);
+
+// 注册 API 密钥验证插件
+server.register(apiKeyAuthPlugin);
 
 server.register(fastifySwagger, {
   openapi: {
