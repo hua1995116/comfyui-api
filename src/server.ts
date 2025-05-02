@@ -53,6 +53,31 @@ const server = Fastify({
 server.setValidatorCompiler(validatorCompiler);
 server.setSerializerCompiler(serializerCompiler);
 
+// 添加 API 密钥验证中间件
+server.addHook('preHandler', (request, reply, done) => {
+  // 如果未启用 API 密钥验证，则跳过验证
+  if (!config.enableApiKeyAuth) {
+    return done();
+  }
+
+  const apiKey = request.headers['x-api-key'];
+
+  // 健康检查端点不需要 API 密钥
+  if (request.url === '/health' || request.url === '/ready') {
+    return done();
+  }
+
+  // 验证 API 密钥
+  if (!apiKey || apiKey !== config.apiKey) {
+    return reply.code(401).send({
+      error: "无效的 API 密钥",
+      message: "请在请求头中提供有效的 X-API-Key"
+    });
+  }
+
+  done();
+});
+
 const modelSchema: any = {};
 for (const modelType in config.models) {
   modelSchema[modelType] = z.string().array();
@@ -77,6 +102,17 @@ server.register(fastifySwagger, {
       title: "ComfyUI API",
       version,
     },
+    components: {
+      securitySchemes: {
+        apiKey: {
+          type: "apiKey",
+          name: "x-api-key",
+          in: "header",
+          description: "API密钥用于验证请求。可以通过环境变量 API_KEY 设置。"
+        }
+      }
+    },
+    security: config.enableApiKeyAuth ? [{ apiKey: [] }] : [],
     servers: [
       {
         url: `{accessDomainName}`,
@@ -468,7 +504,7 @@ server.after(() => {
           }
         }
 
-        return reply.send({ id, prompt, images, filenames, urls });
+        return reply.send({ id, images, filenames, urls });
       }
     }
   );

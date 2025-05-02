@@ -230,6 +230,8 @@ const config = {
   wrapperHost: HOST,
   wrapperPort: port,
   wsClientId,
+  apiKey: process.env.API_KEY || "your-default-api-key-for-development",
+  enableApiKeyAuth: process.env.ENABLE_API_KEY_AUTH === "true" || false,
 };
 
 const modelDir = MODEL_DIR ?? path.join(comfyDir, "models");
