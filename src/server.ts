@@ -56,27 +56,48 @@ const apiKeyAuthPlugin = fp(async (server, options) => {
   server.decorateRequest('apiKey', '');
 
   server.addHook('onRequest', (request, reply, done) => {
+    // 记录所有请求头，帮助调试
+    server.log.info(`请求路径: ${request.url}`);
+    server.log.info(`请求方法: ${request.method}`);
+    server.log.info(`请求头: ${JSON.stringify(request.headers)}`);
+    server.log.info(`请求查询参数: ${JSON.stringify(request.query)}`);
+
     if (!config.enableApiKeyAuth) {
+      server.log.info('API 密钥验证已禁用，跳过验证');
       return done();
     }
 
-    // 获取请求头中的 API 密钥
-    const apiKeyHeader = request.headers['x-api-key'];
+    // 获取请求头中的 API 密钥（尝试多种可能的键名）
+    const apiKeyHeader = request.headers['x-api-key'] ||
+      request.headers['X-API-Key'] ||
+      request.headers['X-Api-Key'] ||
+      request.headers['X-API-KEY'];
+
+    // 尝试从查询参数中获取 API 密钥
+    const queryApiKey = request.query && (request.query as any).api_key;
+
+    const effectiveApiKey = apiKeyHeader || queryApiKey;
+
+    server.log.info(`请求的 API 密钥 (header): ${apiKeyHeader}`);
+    server.log.info(`请求的 API 密钥 (query): ${queryApiKey}`);
+    server.log.info(`有效的 API 密钥: ${effectiveApiKey}`);
 
     // 跳过健康检查端点
-    if (request.url === '/health' || request.url === '/ready') {
+    if (request.url === '/health' || request.url === '/ready' || request.url.startsWith('/docs')) {
+      server.log.info(`跳过 API 密钥验证: ${request.url}`);
       return done();
     }
 
-    if (!apiKeyHeader || apiKeyHeader !== config.apiKey) {
-      server.log.error(`无效的 API 密钥: ${apiKeyHeader}`);
+    if (!effectiveApiKey || effectiveApiKey !== config.apiKey) {
+      server.log.error(`无效的 API 密钥: ${effectiveApiKey}`);
       return reply.code(401).send({
         error: "无效的 API 密钥",
-        message: "请在请求头中提供有效的 X-API-Key"
+        message: "请在请求头 X-API-Key 或查询参数 api_key 中提供有效的 API 密钥"
       });
     }
 
-    request.apiKey = apiKeyHeader;
+    request.apiKey = effectiveApiKey;
+    server.log.info('API 密钥验证通过');
     done();
   });
 });
