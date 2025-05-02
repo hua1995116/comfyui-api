@@ -67,6 +67,19 @@ const apiKeyAuthPlugin = fp(async (server, options) => {
       return done();
     }
 
+    // 检查是否为内部请求 (localhost)
+    const ipAddress = request.ip || request.socket.remoteAddress;
+    const isLocalRequest = ipAddress === '127.0.0.1' ||
+      ipAddress === '::1' ||
+      ipAddress === '::ffff:127.0.0.1' ||
+      request.hostname === 'localhost';
+
+    if (isLocalRequest) {
+      server.log.info(`跳过本地请求的 API 密钥验证: ${ipAddress}`);
+      request.apiKey = config.apiKey; // 为本地请求分配默认 API 密钥
+      return done();
+    }
+
     // 获取请求头中的 API 密钥（尝试多种可能的键名）
     const apiKeyHeader = request.headers['x-api-key'] ||
       request.headers['X-API-Key'] ||
@@ -605,6 +618,7 @@ server.after(() => {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
+                  "X-API-Key": request.apiKey || config.apiKey
                 },
                 body: JSON.stringify({ prompt, id, webhook, convert_output }),
                 dispatcher: new Agent({
