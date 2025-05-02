@@ -70,8 +70,8 @@ server.addHook('preHandler', (request, reply, done) => {
 
   // 验证 API 密钥
   if (!apiKey || apiKey !== config.apiKey) {
-    app.log.error('无效的 API 密钥', apiKey);
-    app.log.error('配置中的值', config.apiKey);
+    app.log.error(`无效的 API 密钥: ${apiKey}`);
+    app.log.error(`配置中的值: ${config.apiKey}`);
     return reply.code(401).send({
       error: "无效的 API 密钥",
       message: "请在请求头中提供有效的 X-API-Key"
